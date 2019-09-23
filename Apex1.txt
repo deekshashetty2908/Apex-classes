@@ -1,0 +1,50 @@
+public class appHC_Parameterlist {
+    public static Boolean callWebService = true;
+    public static Double currentAPIVersion{get;set;}
+    public static List<Healthcheck_Parameter__c > ParameterList{get;set;}
+    public static JSONToApex w{get;set;}
+    public static Map<String,Integer> HealthCheckAssesMentDetailstoInsert=New Map<string,Integer>();  
+    public static Map<String,Double>  HealthCheckDataQualityRecordstoInsert=New Map<string,Double>();   
+    
+    public static Map<String,Healthcheck_Parameter__c> healthcheckparameters=New Map<String,Healthcheck_Parameter__c>();
+    public static Map<String,Healthcheck_Parameter__c> DataQualityParameters=New Map<String,Healthcheck_Parameter__c>();
+    
+    
+    @AuraEnabled
+    public static string appHCAssesmentRecordsCreation(){
+        
+        List<Brillio_HealthCheck_Params__mdt> custMetaDataList = [select NamespacePrefix,Description__c,Dimension__c,Remediation__c,Impact__c,Risk_Category__c,Industry_Standard_Score__c from Brillio_HealthCheck_Params__mdt];
+        List<HealthCheck_Parameter__c> listToAdd = new List<HealthCheck_Parameter__c>();
+        for(Brillio_HealthCheck_Params__mdt c : custMetaDataList)
+        {
+            HealthCheck_Parameter__c h = new HealthCheck_Parameter__c(name=c.NamespacePrefix, dimension__c = c.dimension__c, description__c = c.description__c, industry_standard_score__c = c.industry_standard_score__c, parameter_name__c = c.namespaceprefix, remediation_suggested__c = c.remediation__c);
+            listToAdd.add(h);
+        }
+        upsert listToAdd parameter_name__c;
+        List<HealthCheck_Parameter__c> paramsToUpdate = new List<HealthCheck_Parameter__c>();
+        parameterList = [SELECT Id, Name, Org_score__c FROM Healthcheck_Parameter__c 
+                         where Dimension__c = 'Security' OR Dimension__c='Data Quality' OR Dimension__c='Lightning Compliance'];
+        List<HealthCheck_Parameter__c> allParameterList = new List<HealthCheck_Parameter__c>();
+        List<HealthCheck_Parameter__c> paramList = App_HC_Security.handleSecurityDimension(callWebService);
+        allParameterList.addAll(paramList);
+        paramList = App_HC_DataQuality.handleDQDimension();
+        allParameterList.addAll(paramList);
+        paramList = App_HC_Lightning_Compliance.handleLtngCompliance();
+        allParameterList.addAll(paramList);
+        if(allParameterList.size() > 0)
+        update allParameterList;
+        return 'success';
+    }
+ 
+    @AuraEnabled
+    public static String CalloutAPIVersion(){ 
+        
+        Http h = new Http();
+        HttpRequest req = new HttpRequest();
+        req.setEndpoint('callout:healthcheckapp/services/data/'); 
+        req.setMethod('GET');  
+        req.setHeader('Content-Type', 'application/json');
+        HttpResponse res = h.send(req);
+        return res.getBody(); 
+    }
+}
