@@ -1,0 +1,614 @@
+public class App_HC_DataQuality {
+    
+    public static List<HealthCheck_Parameter__c> handleDQDimension()
+    {
+        List<HealthCheck_Parameter__c> paramList = [Select Id, Name, Dimension__c, Description__c, Remediation__c,Impact__c, Org_score__c, Risk_Category__c 
+                                                    FROM Healthcheck_Parameter__c 
+                                                    where Dimension__c = 'Data Quality'];
+        Map<String,HealthCheck_Parameter__c> healthCheckParamMap = new Map<String,HealthCheck_Parameter__c>();
+        List<HealthCheck_Parameter__c> paramsToUpdate = new List<HealthCheck_Parameter__c>();
+        for(HealthCheck_Parameter__c h : paramList)
+        {
+            //Map of param name with record
+            healthCheckParamMap.put(h.Name, h);
+            
+        }
+        //Account Data Quality
+        for(AggregateResult ar : [SELECT Count(Id) totalCnt,count(Phone) phoneCnt,Count(Rating) ratingCnt,count(Industry) industryCnt,count(Type) typeCnt,count(AnnualRevenue) revCnt from Account])
+        {
+            Decimal actualCount = (Integer)ar.get('phoneCnt') + (Integer)ar.get('ratingCnt') + (Integer)ar.get('industryCnt') + (Integer)ar.get('typeCnt') + (Integer)ar.get('revCnt');
+            Decimal totalCount = (Integer)ar.get('totalCnt') * 5;
+            System.debug('actual count is '+actualCount);
+            System.debug('total count is '+totalCount);
+            Healthcheck_Parameter__c h = healthCheckParamMap.get('Account Data Quality');
+            if(totalCount != 0)
+            h.Org_score__c = (actualCount/totalCount) * 10;
+            else
+            h.org_score__c = 10;
+            paramsToUpdate.add(h);
+            
+        }
+        //Contact Data quality
+        for(AggregateResult ar : [SELECT count(id) totalCnt, count(Phone) phoneCnt,Count(Email) emailCnt,count(Salutation) salCnt,count(title) titleCnt,count(MailingCity) cityCnt from Contact])
+        {
+            Decimal actualCount = (Integer)ar.get('phoneCnt') + (Integer)ar.get('emailCnt') + (Integer)ar.get('salCnt') + (Integer)ar.get('titleCnt') + (Integer)ar.get('cityCnt');
+            Decimal totalCount = (Integer)ar.get('totalCnt') * 5;
+            Healthcheck_Parameter__c h = healthCheckParamMap.get('Contact Data Quality');
+            if(totalCount != 0)
+            h.Org_score__c = (actualCount/totalCount) * 10;
+            else
+            h.org_score__c=10;
+            paramsToUpdate.add(h);
+         
+            
+        }
+        System.debug('size in loop '+paramsToUpdate.size());
+        //Opportunity Data Quality
+        for(AggregateResult ar : [SELECT Count(Id) totalCnt,Count(Type) cntType,count(ExpectedRevenue) cntRev,count(NextStep) cntNext,count(Probability) cntProb,count(ForecastCategoryName) cntForeCast FROM Opportunity])
+        {
+            Decimal actualCount = (Integer)ar.get('cntType') + (Integer)ar.get('cntRev') + (Integer)ar.get('cntNext') + (Integer)ar.get('cntProb') + (Integer)ar.get('cntForeCast');
+            Decimal totalCount = (Integer)ar.get('totalCnt') * 5;
+            Healthcheck_Parameter__c h = healthCheckParamMap.get('Opportunity Data Quality');
+            if(totalCount != 0)
+            h.Org_score__c = (actualCount/totalCount) * 10;
+            else
+            h.org_score__c = 10;
+            paramsToUpdate.add(h);
+            
+        }
+        //Activity Data quality
+        for(AggregateResult ar : [SELECT Count(Id) totalCnt,Count(subject) subjectCnt,count(whatID) whatIDCnt,count(WhoID) whoIDCnt FROM task])
+        {
+            Decimal actualCount = (Integer)ar.get('subjectCnt') + (Integer)ar.get('whatIDCnt') + (Integer)ar.get('whoIDCnt');
+            Decimal totalCount = (Integer)ar.get('totalCnt') * 3;
+            
+            Healthcheck_Parameter__c h = healthCheckParamMap.get('Activity Data Quality');
+            if(totalCount != 0)
+            h.Org_score__c = (actualCount/totalCount) * 10;
+            else
+            h.org_score__c = 10;
+            paramsToUpdate.add(h);
+            
+        }
+        //Account Data Duplication
+        Decimal duplicateCnt=0;
+        Decimal totalCnt = 0;
+        for(AggregateResult ar : [SELECT Count(Id) dupCnt,name, BillingCity,OwnerID FROM Account Group by name,OwnerID,BillingCity having count(id) > 1])
+        {
+            duplicateCnt = duplicateCnt + (Integer)ar.get('dupCnt');
+        }
+        for(AggregateResult ar : [SELECT Count(Id) totalCnt FROM Account])
+        {
+            totalCnt = (Integer)ar.get('totalCnt');
+        }
+      
+        Healthcheck_Parameter__c h = healthCheckParamMap.get('Account Data Duplication');
+        Decimal finalCnt;
+        if(totalCnt !=0)
+        {
+            finalCnt = duplicateCnt/totalCnt;
+            h.Org_score__c = 10 - finalCnt;
+            
+        }
+        else
+        {
+              h.Org_score__c = 10;
+              
+        }
+        paramsToUpdate.add(h);
+        
+        //Contact Data Duplication
+        duplicateCnt = 0;
+        totalCnt = 0;
+        for(AggregateResult ar : [SELECT Count(Id) dupCnt,name, AccountID,Email FROM Contact Group by name,AccountID,Email having count(id) > 1])
+        {
+            duplicateCnt = duplicateCnt + (Integer)ar.get('dupCnt');
+        }
+        for(AggregateResult ar : [SELECT Count(Id) totalCnt FROM Contact])
+        {
+            totalCnt = (Integer)ar.get('totalCnt');
+        }
+        h = healthCheckParamMap.get('Contact Data Duplication');
+        if(totalCnt !=0)
+        {
+            finalCnt = duplicateCnt/totalCnt;
+            h.Org_score__c = 10 - finalCnt;
+         
+        }
+        else
+        {
+            h.Org_score__c = 10;
+            
+        }
+        paramsToUpdate.add(h);
+        
+        
+        //Opportunity Data Duplication
+        duplicateCnt=0;
+        totalCnt = 0;
+        for(AggregateResult ar : [SELECT Count(Id) dupCnt,name, AccountID,CloseDate FROM Opportunity Group by name,AccountID,CloseDate having count(id) > 1])
+        {
+            duplicateCnt = duplicateCnt + (Integer)ar.get('dupCnt');
+        }
+        for(AggregateResult ar : [SELECT Count(Id) totalCnt FROM Opportunity])
+        {
+            totalCnt = (Integer)ar.get('totalCnt');
+        }
+        h = healthCheckParamMap.get('Opportunity Data Duplication');
+        if(totalCnt !=0)
+        {
+            finalCnt = duplicateCnt/totalCnt;
+           h.Org_score__c = 10 - finalCnt;
+        }
+        else
+            h.org_score__c = 10;
+       
+        paramsToUpdate.add(h);
+        
+        //Case Data Duplication
+        duplicateCnt=0;
+        totalCnt=0;
+        for(AggregateResult ar : [SELECT Count(Id) dupCnt,contactID,Subject FROM Case Group by contactID,subject having count(id) > 1])
+        {
+            duplicateCnt = duplicateCnt + (Integer)ar.get('dupCnt');
+        }
+        for(AggregateResult ar : [SELECT Count(Id) totalCnt FROM Case])
+        {
+            totalCnt = (Integer)ar.get('totalCnt');
+        }
+        h = healthCheckParamMap.get('Case Data Duplication');
+        if(totalCnt != 0)
+        {
+            finalCnt = duplicateCnt/totalCnt;
+           h.Org_score__c = 10 - finalCnt;
+        }
+        else
+            h.org_score__c = 10;
+       
+        paramsToUpdate.add(h);
+        
+        //Lead Data Duplication
+        duplicateCnt=0;
+        totalCnt = 0;
+        for(AggregateResult ar : [SELECT Count(Id) dupCnt,email FROM Lead Group by email having count(id) > 1])
+        {
+            duplicateCnt = duplicateCnt + (Integer)ar.get('dupCnt');
+        }
+        for(AggregateResult ar : [SELECT Count(Id) totalCnt FROM Lead])
+        {
+            totalCnt = (Integer)ar.get('totalCnt');
+        }
+        h = healthCheckParamMap.get('Lead Data Duplication');
+        if(totalCnt !=0)
+        {
+            finalCnt = duplicateCnt/totalCnt;
+          h.Org_score__c = 10 - finalCnt;
+        }
+        else
+            h.org_score__c = 10;
+        paramsToUpdate.add(h);
+       
+        /* Data Completion */
+        //Account Data Completion
+        Integer totalRecords = [select id from Account].size();
+        Map<String, Schema.SObjectField> objectFields = Schema.getGlobalDescribe().get('Account').getDescribe().fields.getMap();
+        String finalQuery='select';
+        Integer numberOfFields=0;
+        Integer cnt=0;
+        
+        Set<String> stringSet = new Set<String>();
+        stringSet.add('BOOLEAN');
+        stringset.add('MULTIPICKLIST');
+        stringset.add('ADDRESS');
+        stringset.add('TEXTAREA');
+        for(Schema.sobjectField f : objectFields.values())
+        {
+            String fieldType = String.valueOf(f.getDescribe().getType());
+            if(stringSet.contains(fieldType) == false)
+            {
+                numberOfFields++;
+            }
+        }
+        // Grab the fields from the describe method and append them to the queryString one by one.
+        for(Schema.SObjectField f : objectFields.values()) 
+        {
+            String fieldType = String.valueOf(f.getDescribe().getType());
+            if(stringSet.contains(fieldType) == false)
+            {
+                cnt++;
+                string fieldName = f.getDescribe().getName();
+                if(cnt < numberOfFields)
+                {
+                    finalQuery = finalQuery+' '+'count('+fieldName + ')'+' f'+cnt+',';
+                }
+                else
+                    finalQuery = finalQuery+' '+'count('+fieldName+')'+' f'+cnt;
+            }
+        }
+        finalQuery = finalQuery+' from Account';
+        List<AggregateResult> agrResult = Database.query(finalQuery);
+        Decimal total=0;
+        for(Integer i=1;i<=cnt;i++)
+        {
+            total=total+Integer.valueof(agrResult[0].get('f'+i));
+            
+        }
+        h = healthCheckParamMap.get('Account Data Completion');
+        if(totalRecords != 0)
+        {
+            total = (total/(numberOfFields * totalRecords))*10;
+          h.org_score__c = Integer.valueOf(total);
+        }
+        else
+            h.org_score__c =10;
+      
+        paramsToUpdate.add(h);
+        /******************/
+        //Contact Data Completion
+        totalRecords = [select id from Contact].size();
+        objectFields = Schema.getGlobalDescribe().get('Contact').getDescribe().fields.getMap();
+        finalQuery='select';
+        numberOfFields=0;
+        cnt=0;
+        for(Schema.sobjectField f : objectFields.values())
+        {
+            String fieldType = String.valueOf(f.getDescribe().getType());
+            if(stringSet.contains(fieldType) == false)
+            {
+                numberOfFields++;
+            }
+        }
+        for(Schema.SObjectField f : objectFields.values()) 
+        {
+            String fieldType = String.valueOf(f.getDescribe().getType());
+            if(stringSet.contains(fieldType) == false)
+            {
+                cnt++;
+                string fieldName = f.getDescribe().getName();
+                if(cnt < numberOfFields)
+                {
+                    finalQuery = finalQuery+' '+'count('+fieldName + ')'+' f'+cnt+',';
+                }
+                else
+                    finalQuery = finalQuery+' '+'count('+fieldName+')'+' f'+cnt;
+            }
+        }
+        finalQuery = finalQuery+' from Contact';
+        agrResult = Database.query(finalQuery);
+        total=0;
+        for(Integer i=1;i<=cnt;i++)
+        {
+            total=total+Integer.valueof(agrResult[0].get('f'+i));
+        }
+        h = healthCheckParamMap.get('Contact Data Completion');
+        if(totalRecords != 0)
+        {
+            total = (total/(numberOfFields * totalRecords))*10;
+          h.org_score__c = Integer.valueOf(total);
+        }
+        else
+            h.org_score__c = 10;
+        paramsToUpdate.add(h);
+        
+        //Opportunity Data Completion
+        totalRecords = [select id from Opportunity].size();
+        objectFields = Schema.getGlobalDescribe().get('Opportunity').getDescribe().fields.getMap();
+        finalQuery='select';
+        numberOfFields=0;
+        cnt=0;
+        for(Schema.sobjectField f : objectFields.values())
+        {
+            
+            String fieldType = String.valueOf(f.getDescribe().getType());
+            
+            if(stringSet.contains(fieldType) == false)
+            {
+                numberOfFields++;
+            }
+            
+            
+        }
+        
+        // Grab the fields from the describe method and append them to the queryString one by one.
+        for(Schema.SObjectField f : objectFields.values()) {
+            String fieldType = String.valueOf(f.getDescribe().getType());
+            if(stringSet.contains(fieldType) == false)
+            {
+                cnt++;
+                string fieldName = f.getDescribe().getName();
+                if(cnt < numberOfFields)
+                {
+                    finalQuery = finalQuery+' '+'count('+fieldName + ')'+' f'+cnt+',';
+                }
+                else
+                    finalQuery = finalQuery+' '+'count('+fieldName+')'+' f'+cnt;
+            }
+            
+            
+        }
+        finalQuery = finalQuery+' from Opportunity';
+        
+        agrResult = Database.query(finalQuery);
+        total=0;
+        
+        for(Integer i=1;i<=cnt;i++)
+        {
+            total=total+Integer.valueof(agrResult[0].get('f'+i));
+            
+        }
+        h = healthCheckParamMap.get('Opportunity Data Completion');
+        if(totalRecords != 0)
+        {
+          total = (total/(numberOfFields * totalRecords))*10;
+          h.org_score__c = Integer.valueOf(total);
+        }
+        else
+            h.org_score__c =10;
+        paramsToUpdate.add(h);
+        
+        //Lead data completion
+        totalRecords = [select id from Lead].size();
+        objectFields = Schema.getGlobalDescribe().get('Lead').getDescribe().fields.getMap();
+        finalQuery='select';
+        numberOfFields=0;
+        cnt=0;
+        
+        for(Schema.sobjectField f : objectFields.values())
+        {
+            
+            String fieldType = String.valueOf(f.getDescribe().getType());
+            
+            if(stringSet.contains(fieldType) == false)
+            {
+                numberOfFields++;
+            }
+            
+            
+        }
+        
+        // Grab the fields from the describe method and append them to the queryString one by one.
+        for(Schema.SObjectField f : objectFields.values()) {
+            String fieldType = String.valueOf(f.getDescribe().getType());
+            if(stringSet.contains(fieldType) == false)
+            {
+                cnt++;
+                string fieldName = f.getDescribe().getName();
+                if(cnt < numberOfFields)
+                {
+                    finalQuery = finalQuery+' '+'count('+fieldName + ')'+' f'+cnt+',';
+                }
+                else
+                    finalQuery = finalQuery+' '+'count('+fieldName+')'+' f'+cnt;
+            }
+            
+            
+        }
+        finalQuery = finalQuery+' from Lead';
+        
+        agrResult = Database.query(finalQuery);
+        total=0;
+        
+        for(Integer i=1;i<=cnt;i++)
+        {
+            total=total+Integer.valueof(agrResult[0].get('f'+i));
+            
+        }
+        h = healthCheckParamMap.get('Lead Data Completion');
+        if(totalRecords != 0)
+        {
+            total = (total/(numberOfFields * totalRecords))*10;
+          h.org_score__c = Integer.valueOf(total);
+        }
+        else
+            h.org_score__c = 10;
+        paramsToUpdate.add(h);
+        
+        //Case data completion
+        totalRecords = [select id from Case].size();
+        objectFields = Schema.getGlobalDescribe().get('Case').getDescribe().fields.getMap();
+        finalQuery='select';
+        numberOfFields=0;
+        cnt=0;
+        for(Schema.sobjectField f : objectFields.values())
+        {
+            
+            String fieldType = String.valueOf(f.getDescribe().getType());
+            
+            if(stringSet.contains(fieldType) == false)
+            {
+                numberOfFields++;
+            }
+            
+            
+        }
+        
+        for(Schema.SObjectField f : objectFields.values()) {
+            String fieldType = String.valueOf(f.getDescribe().getType());
+            if(stringSet.contains(fieldType) == false)
+            {
+                cnt++;
+                string fieldName = f.getDescribe().getName();
+                if(cnt < numberOfFields)
+                {
+                    finalQuery = finalQuery+' '+'count('+fieldName + ')'+' f'+cnt+',';
+                }
+                else
+                    finalQuery = finalQuery+' '+'count('+fieldName+')'+' f'+cnt;
+            }
+            
+            
+        }
+        finalQuery = finalQuery+' from Case';
+        
+        agrResult = Database.query(finalQuery);
+        total=0;
+        
+        for(Integer i=1;i<=cnt;i++)
+        {
+            total=total+Integer.valueof(agrResult[0].get('f'+i));
+            
+        }
+        h = healthCheckParamMap.get('Case Data Completion');
+        if(totalRecords != 0)
+        {
+            total = (total/(numberOfFields * totalRecords))*10;
+          h.org_score__c = Integer.valueOf(total);
+        }
+        else
+            h.org_score__c =10;
+        paramsToUpdate.add(h);
+        
+        //Account Data age
+        Decimal last6Months = Database.countQuery('select count() from account where lastmodifiedDate = last_N_Months:6 ');
+        Decimal last12Months = Database.countQuery('select count() from account where lastmodifiedDate = last_N_Months:12 and lastmodifiedDate < last_N_Months:6');
+        Decimal lastYear = Database.countQuery('select count() from account where lastmodifiedDate < last_N_Months:12');
+        Decimal totalCount = Database.countQuery('select count() from account');
+        h = healthCheckParamMap.get('Account Data Age');
+        if(totalCount != 0)
+        h.org_score__c = Integer.valueOf((last6Months * 5 + last12Months * 3)/(totalCount * 5) * 10);
+        else
+        h.org_score__c = 10;
+        paramsToUpdate.add(h);
+        
+        //Contact Data age
+        last6Months = Database.countQuery('select count() from Contact where lastmodifiedDate = last_N_Months:6 ');
+        last12Months = Database.countQuery('select count() from Contact where lastmodifiedDate = last_N_Months:12 and lastmodifiedDate < last_N_Months:6');
+        lastYear = Database.countQuery('select count() from Contact where lastmodifiedDate < last_N_Months:12');
+        totalCount = Database.countQuery('select count() from Contact');
+        h = healthCheckParamMap.get('Contact Data Age');
+        if(totalCount != 0)
+        h.org_score__c = Integer.valueOf((last6Months * 5 + last12Months * 3)/(totalCount * 5) * 10);
+        else
+        h.org_score__c =10;
+        paramsToUpdate.add(h);
+        
+        //Opportunity data age
+        last6Months = Database.countQuery('select count() from Opportunity where lastmodifiedDate = last_N_Months:6 ');
+        last12Months = Database.countQuery('select count() from Opportunity where lastmodifiedDate = last_N_Months:12 and lastmodifiedDate < last_N_Months:6');
+        lastYear = Database.countQuery('select count() from Opportunity where lastmodifiedDate < last_N_Months:12');
+        totalCount = Database.countQuery('select count() from Opportunity');
+        h = healthCheckParamMap.get('Opportunity Data Age');
+        if(totalCount != 0)
+        h.org_score__c = Integer.valueOf((last6Months * 5 + last12Months * 3)/(totalCount * 5) * 10);
+        else
+        h.org_score__c = 10;
+        paramsToUpdate.add(h);
+        
+        //Lead data age
+        last6Months = Database.countQuery('select count() from Lead where lastmodifiedDate = last_N_Months:6 ');
+        last12Months = Database.countQuery('select count() from Lead where lastmodifiedDate = last_N_Months:12 and lastmodifiedDate < last_N_Months:6');
+        lastYear = Database.countQuery('select count() from Lead where lastmodifiedDate < last_N_Months:12');
+        totalCount = Database.countQuery('select count() from Lead');
+        h = healthCheckParamMap.get('Lead Data Age');
+        if(totalCount != 0)
+        h.org_score__c = Integer.valueOf((last6Months * 5 + last12Months * 3)/(totalCount * 5) * 10);
+        else
+        h.org_score__c = 10;
+        paramsToUpdate.add(h);
+        
+        //Case data age
+        last6Months = Database.countQuery('select count() from Case where lastmodifiedDate = last_N_Months:6 ');
+        last12Months = Database.countQuery('select count() from Case where lastmodifiedDate = last_N_Months:12 and lastmodifiedDate < last_N_Months:6');
+        lastYear = Database.countQuery('select count() from Case where lastmodifiedDate < last_N_Months:12');
+        totalCount = Database.countQuery('select count() from Case');
+        h = healthCheckParamMap.get('Case Data Age');
+        if(totalCount != 0)
+        h.org_score__c = Integer.valueOf((last6Months * 5 + last12Months * 3)/(totalCount * 5) * 10);
+        else
+        h.org_score__c = 10;
+        paramsToUpdate.add(h);
+        
+        //Account ownership data skew 
+        Boolean isCntExceeded10K = false;
+        for(AggregateResult a : [select count(id) cnt, ownerID from Account group by ownerID])
+        {
+            if((Integer)a.get('cnt') > 10000)
+            {
+                isCntExceeded10K = true;
+            }
+            break;
+        }
+        h = healthCheckParamMap.get('Account Ownership Data Skew');
+        if(isCntExceeded10K == true)
+            h.org_score__c = 0;
+        else
+            h.org_score__c = 10;
+        
+        paramsToUpdate.add(h);
+        
+        //Contact ownership data skew 
+        isCntExceeded10K = false;
+        for(AggregateResult a : [select count(id) cnt, ownerID from Contact group by ownerID])
+        {
+            if((Integer)a.get('cnt') > 10000)
+            {
+                isCntExceeded10K = true;
+            }
+            break;
+        }
+        h = healthCheckParamMap.get('Contact Ownership Data Skew');
+        if(isCntExceeded10K == true)
+            h.org_score__c = 0;
+        else
+            h.org_score__c = 10;
+        
+        paramsToUpdate.add(h);
+        
+         //Opportunity ownership data skew 
+        isCntExceeded10K = false;
+        for(AggregateResult a : [select count(id) cnt, ownerID from Opportunity group by ownerID])
+        {
+            if((Integer)a.get('cnt') > 10000)
+            {
+                isCntExceeded10K = true;
+            }
+            break;
+        }
+        h = healthCheckParamMap.get('Opportunity Ownership Data Skew');
+        if(isCntExceeded10K == true)
+            h.org_score__c = 0;
+        else
+            h.org_score__c = 10;
+        
+        paramsToUpdate.add(h);
+        
+         //Lead ownership data skew 
+        isCntExceeded10K = false;
+        for(AggregateResult a : [select count(id) cnt, ownerID from Lead group by ownerID])
+        {
+            if((Integer)a.get('cnt') > 10000)
+            {
+                isCntExceeded10K = true;
+            }
+            break;
+        }
+        h = healthCheckParamMap.get('Lead Ownership Data Skew');
+        if(isCntExceeded10K == true)
+            h.org_score__c = 0;
+        else
+            h.org_score__c = 10;
+        
+        paramsToUpdate.add(h);
+        
+        //Case ownership data skew 
+        isCntExceeded10K = false;
+        for(AggregateResult a : [select count(id) cnt, ownerID from Case group by ownerID])
+        {
+            if((Integer)a.get('cnt') > 10000)
+            {
+                isCntExceeded10K = true;
+            }
+            break;
+        }
+        h = healthCheckParamMap.get('Case Ownership Data Skew');
+        if(isCntExceeded10K == true)
+            h.org_score__c = 0;
+        else
+            h.org_score__c = 10;
+        
+        paramsToUpdate.add(h);
+        
+        return paramsToUpdate;
+        
+    }
+}

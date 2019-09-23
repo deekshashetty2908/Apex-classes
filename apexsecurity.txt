@@ -1,0 +1,153 @@
+public class App_HC_Security {
+    
+    public static JSONToApex w{get;set;}
+    public static Double currentAPIVersion{get;set;}
+    
+    public static List<HealthCheck_Parameter__c> handleSecurityDimension(Boolean callWebService)
+    {
+        List<HealthCheck_Parameter__c> paramsToUpdate = new List<HealthCheck_Parameter__c>();
+        List<HealthCheck_Parameter__c> paramList = [Select Id, Name, Dimension__c, Description__c, Remediation__c,Impact__c, Org_score__c, Risk_Category__c 
+                         FROM Healthcheck_Parameter__c 
+                         where Dimension__c = 'Security'];
+         Map<String,HealthCheck_Parameter__c> healthCheckParamMap = new Map<String,HealthCheck_Parameter__c>();
+        for(HealthCheck_Parameter__c h : paramList)
+        {
+            //Map of param name with record
+            healthCheckParamMap.put(h.Name, h);
+            
+        }
+       
+                Map<String,JSONToApex.Records> orgHealthCheckValues = new Map<String,JSONToApex.Records>();
+                String msg;
+                
+                msg = CalloutSecurityDimension();
+               
+                if(msg == 'Success')
+                {
+                    for(JSONToApex.Records r : w.records)
+                    {
+                        orgHealthCheckValues.put(r.setting, r);
+                    }
+                }
+                for(String str : healthCheckParamMap.keySet())
+                {
+                    HealthCheck_Parameter__c h = healthCheckParamMap.get(str);
+                    if(orgHealthCheckValues.containsKey(str))
+                    {
+                        JSONToApex.Records r = orgHealthCheckValues.get(str);
+                        if(r.orgValue == r.standardValue)
+                        {
+                            
+                            h.Org_score__c = 10;
+                        }
+                        else
+                        {
+                         
+                            if(r.setting=='Minimum password length' || r.setting=='Enforce password history')
+                                {
+                                
+                                    String[] orgResult = r.orgValue.split(' ');
+                                    String[] standardResult = r.standardValue.split(' ');
+                                    if((orgResult[0]) > (standardResult[0]))
+                                    {
+                                        h.Org_score__c = 10;
+                                    }
+                                    else
+                                    {
+                                        h.Org_score__c = 0;
+                                    } 
+                                }
+                                else if(r.setting=='Maximum invalid login attempts')
+                                {
+                                    String[] orgResult = r.orgValue.split(' ');
+                                    String[] standardResult = r.standardValue.split(' ');
+                                    if((orgResult[0]) < (standardResult[0]))
+                                    {
+                                        h.Org_score__c = 10;
+                                    }
+                                    else
+                                    {
+                                        h.Org_score__c = 0;
+                                    } 
+                                }
+                                
+                        }
+                    }
+                    else if(h.name == 'Lightning API Version')
+                    {
+                        String response = AppHC_Parameterlist.CalloutAPIVersion();
+                        System.debug('kph '+response);
+                        String apiVersion='';
+                        List<double> versionList=new List<double>();
+                        JSONParser  parser = JSON.createParser(Response);
+                        while (parser.nextToken() != null) 
+                        {
+                            if ((parser.getCurrentToken() == JSONToken.FIELD_NAME))
+                            {
+                                String fieldName = parser.getText();
+                                if(fieldName == 'version')
+                                {
+                                    parser.nextToken(); 
+                                    versionList.add(decimal.valueof(parser.getText()));
+                                }
+                            }
+                        }
+                        versionList.sort();
+                        currentAPIVersion = versionList[versionList.size()-1]/2;
+                        Integer countOfApexClasses = database.countQuery('select count() from ApexClass');
+                        Integer countOfAuraBundle = database.countQuery('select count() from AuraDefinitionBundle');
+                        Integer countOfApexTrigger = database.countQuery('select count() from ApexTrigger');
+                        Integer countOfApexComp = database.countQuery('select count() from ApexComponent');
+                        Decimal totalRequiredCount = (countOfApexClasses + countOfAuraBundle + countOfApexTrigger + countOfApexComp) * 0.5;
+                    
+                        Integer countOfApexClassesWithOlderVersions = database.countQuery('select count() from ApexClass where apiversion <:currentAPIVersion');
+                        Integer countOfAuraBundlesWithOlderVersions = database.countQuery('select count() from AuraDefinitionBundle where apiversion <:currentAPIVersion');
+                        Integer countOfApexTriggerWithOlderVersions = database.countQuery('select count() from ApexTrigger where apiversion <:currentAPIVersion');
+                        Integer countOfApexCompWithOlderVersions = database.countQuery('select count() from ApexComponent where apiversion <:currentAPIVersion');
+                        Decimal totalActualCount = countOfApexClassesWithOlderVersions + countOfAuraBundlesWithOlderVersions + countOfApexTriggerWithOlderVersions + countOfApexCompWithOlderVersions;
+                        System.debug('total actual count is '+totalActualCount);
+                        System.debug('total required count is '+totalRequiredCount);
+                        if(totalActualCount < = totalRequiredCount)
+                        {
+                            h.Org_score__c = 10;
+                        }
+                        else
+                            h.Org_score__c = 0;
+                    }
+                    else if(h.name == 'Number Of System Admins')
+                    {
+                        String profileName = 'System Administrator';
+                        Integer actualCount = database.countQuery('select count() from user where profile.name =:profileName');
+                        Integer expectedCount = database.countQuery('select count() from user where isActive = true')/50;
+                        if(actualCount >= expectedCount)
+                        {
+                            h.Org_score__c = 10;
+                        }
+                        else
+                            h.Org_score__c = 0;
+                    }
+                    paramsToUpdate.add(h);
+                   
+                }
+        return paramsToUpdate;
+    }
+     @AuraEnabled
+ public static String CalloutSecurityDimension(){ 
+    
+        Http h = new Http();
+        HttpRequest req = new HttpRequest();
+       
+        //req.setEndpoint('https://pre-sales1-brillio-dev-ed.my.salesforce.com'+'/services/data/v45.0/tooling/query/?q=SELECT+Id,Setting,RiskType,OrgValue,OrgValueRaw,StandardValue,StandardValueRaw,SettingGroup,SettingRiskCategory+FROM+SecurityHealthCheckRisks'); 
+        req.setEndpoint('callout:healthcheckapp/services/data/v45.0/tooling/query/?q=SELECT+Id,Setting,RiskType,OrgValue,OrgValueRaw,StandardValue,StandardValueRaw,SettingGroup,SettingRiskCategory+FROM+SecurityHealthCheckRisks'); 
+        req.setMethod('GET');  
+        req.setHeader('Content-Type', 'application/json');
+        HttpResponse res = h.send(req);
+        System.debug('JSON value is '+res.getBody());
+        
+        System.debug('@@ json2apex '+(JSONToApex) System.JSON.deserialize(res.getBody(), JSONToApex.class));
+        w = (JSONToApex) System.JSON.deserialize(res.getBody(), JSONToApex.class);
+     
+      
+        return 'Success'; 
+    }
+}

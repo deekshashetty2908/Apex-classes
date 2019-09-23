@@ -1,0 +1,63 @@
+public class App_HC_Lightning_Compliance {
+    public static List<HealthCheck_Parameter__c> handleLtngCompliance()
+    {
+        List<HealthCheck_Parameter__c> paramList = [Select Id, Name, Dimension__c, Description__c, Remediation__c,Impact__c, Org_score__c, Risk_Category__c 
+                                                    FROM Healthcheck_Parameter__c 
+                                                    where Dimension__c = 'Lightning Compliance'];
+        List<HealthCheck_Parameter__c> paramsToUpdate = new List<HealthCheck_Parameter__c>();
+        Map<String,HealthCheck_Parameter__c> healthCheckParamMap = new Map<String,HealthCheck_Parameter__c>();
+        for(HealthCheck_Parameter__c h : paramList)
+        {
+            //Map of param name with record
+            healthCheckParamMap.put(h.Name, h);
+            
+        }
+        
+        //JS buttons
+        HealthCheck_Parameter__c h = healthCheckParamMap.get('Details - Custom Buttons and Links—JavaScript');
+        String buttonType = 'JavaScript';
+        Integer countOfButtons = Database.countQuery('select count() from WebLink where linktype=:buttonType');
+        if(countOfButtons == 0)
+            h.org_Score__c = 10;
+        else if(countOfButtons < 10)
+            h.org_score__c = 6;
+        else h.org_score__c = 0;
+        
+        paramsToUpdate.add(h);
+        
+        h = healthCheckParamMap.get('Details - Custom Buttons and Links—URLs');
+        buttonType = 'Url';
+        countOfButtons = Database.countQuery('select count() from WebLink where linktype=:buttonType');
+        if(countOfButtons == 0)
+            h.org_Score__c = 10;
+        else if(countOfButtons < 10)
+            h.org_score__c = 6;
+        else h.org_score__c = 0;
+        
+        paramsToUpdate.add(h);
+        h = healthCheckParamMap.get('Visualforce Email Templates');
+        buttonType = 'Url';
+        countOfButtons = Database.countQuery('select count() from WebLink where linktype=:buttonType');
+        if(countOfButtons == 0)
+            h.org_Score__c = 10;
+         else if(countOfButtons < 10)
+            h.org_score__c = 6;
+        else h.org_score__c = 0;
+        
+        paramsToUpdate.add(h);
+        h = healthCheckParamMap.get('Details - Tabs, Objects and Related Lists');
+        Integer countOfAttachments = Database.countQuery('select count() from Attachment');
+        Integer countOfDocuments = Database.countQuery('select count() from Document');
+        Integer countOfNotes = Database.countQuery('select count() from Note');
+        Integer totalCount = countOfAttachments + countOfDocuments + countOfNotes;
+        if(totalCount == 0)
+            h.org_Score__c = 10;
+        else if(totalCount < 10)
+            h.org_score__c = 6;
+        else 
+            h.org_score__c = 0;
+        
+        paramsToUpdate.add(h);
+        return paramsToUpdate;
+    }
+}
